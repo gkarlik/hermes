@@ -2,19 +2,24 @@ package views
 
 import (
 	"fmt"
+
+	"github.com/gkarlik/hermes"
 	"github.com/jroimartin/gocui"
-	"time"
 )
 
 type InputView struct {
-	Name string
-	nick string
+	Name   string
+	main   *MainView
+	status *StatusView
+	client *hermes.Client
 }
 
-func NewInputView(nick string) *InputView {
+func NewInputView(c *hermes.Client, mv *MainView, sv *StatusView) *InputView {
 	return &InputView{
-		Name: "input",
-		nick: nick,
+		Name:   "input",
+		main:   mv,
+		status: sv,
+		client: c,
 	}
 }
 
@@ -31,7 +36,7 @@ func (iv *InputView) Layout(g *gocui.Gui) error {
 		v.Frame = false
 		v.FgColor = gocui.ColorWhite
 
-		if err := g.SetKeybinding(iv.Name, gocui.KeyEnter, gocui.ModNone, handleCommand(iv.nick)); err != nil {
+		if err := g.SetKeybinding(iv.Name, gocui.KeyEnter, gocui.ModNone, handleCommand(iv)); err != nil {
 			return err
 		}
 
@@ -42,14 +47,39 @@ func (iv *InputView) Layout(g *gocui.Gui) error {
 	return nil
 }
 
-func handleCommand(nick string) func(*gocui.Gui, *gocui.View) error {
+func (iv *InputView) Init(g *gocui.Gui) error {
+	messages, err := iv.client.Init()
+	if err != nil {
+		return err
+	}
+
+	go func() {
+		for {
+			select {
+			case msg := <-messages:
+				iv.main.Update(g, fmt.Sprintf("<%s> %s", msg.Sender, msg.Body))
+			}
+		}
+	}()
+
+	return nil
+}
+
+func handleCommand(iv *InputView) func(*gocui.Gui, *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		view, err := g.View("main")
-		if err != nil {
+		cmd := v.ViewBuffer()
+
+		msg := &hermes.Message{
+			Type:      hermes.BROADCAST,
+			Sender:    iv.client.ID,
+			Recipient: "*",
+			Body:      cmd,
+		}
+		if err := iv.client.SendMessage(msg); err != nil {
+			iv.status.Update(g, "Cannot send command to the server!")
+
 			return err
 		}
-
-		fmt.Fprintf(view, "%s <%s> %s", time.Now().Format("15:04:05"), nick, v.ViewBuffer())
 
 		v.Clear()
 		v.SetCursor(0, 0)

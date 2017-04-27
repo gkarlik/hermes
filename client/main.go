@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+
+	"github.com/gkarlik/hermes"
 	"github.com/gkarlik/hermes/client/views"
 	"github.com/jroimartin/gocui"
 )
@@ -25,7 +27,12 @@ func keybindings(g *gocui.Gui) error {
 
 func main() {
 	nick := flag.String("nick", "unknown", "name of the user")
+	server := flag.String("server", "tcp://localhost:8080", "address of the server")
 	flag.Parse()
+
+	cfg := hermes.NewConfig(*nick, *server)
+	client := hermes.NewClient(cfg)
+	defer client.Close()
 
 	gui, err := gocui.NewGui(gocui.Output256)
 	if err != nil {
@@ -36,10 +43,12 @@ func main() {
 	hv := views.NewHeaderView(fmt.Sprintf("%s v%s", appName, version))
 	mv := views.NewMainView()
 	sv := views.NewStatusView()
-	iv := views.NewInputView(*nick)
+	iv := views.NewInputView(client, mv, sv)
 
 	gui.Cursor = true
 	gui.SetManager(hv, mv, sv, iv)
+
+	iv.Init(gui)
 
 	if err := keybindings(gui); err != nil {
 		panic(err)
