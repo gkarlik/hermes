@@ -37,7 +37,6 @@ func (mv *MainView) Update(g *gocui.Gui, content string) {
 		if err != nil {
 			return err
 		}
-		v.Clear()
 		fmt.Fprint(v, content)
 
 		return nil
